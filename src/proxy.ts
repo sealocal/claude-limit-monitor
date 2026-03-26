@@ -4,6 +4,7 @@ import * as tls from "tls";
 import * as net from "net";
 import { EventEmitter } from "events";
 import { URL } from "url";
+import * as selfsigned from "selfsigned";
 
 export interface RateLimitInfo {
   timestamp: Date;
@@ -26,6 +27,8 @@ export class AnthropicProxy extends EventEmitter {
   private server: http.Server | null = null;
   private port: number;
   private targetHosts: string[];
+  private tlsKey: string = "";
+  private tlsCert: string = "";
 
   constructor(port: number, targetHosts: string[] = ["api.anthropic.com"]) {
     super();
@@ -33,14 +36,30 @@ export class AnthropicProxy extends EventEmitter {
     this.targetHosts = targetHosts;
   }
 
-  start(): Promise<void> {
+  async start(): Promise<void> {
+    // Generate self-signed cert with SANs for all target hosts
+    const altNames = this.targetHosts.map((h) => ({ type: 2 as const, value: h }));
+    const notAfterDate = new Date();
+    notAfterDate.setFullYear(notAfterDate.getFullYear() + 1);
+    const pems = await selfsigned.generate(
+      [{ name: "commonName", value: this.targetHosts[0] }],
+      {
+        keySize: 2048,
+        algorithm: "sha256",
+        notAfterDate,
+        extensions: [
+          { name: "subjectAltName", altNames },
+        ],
+      }
+    );
+    this.tlsKey = pems.private;
+    this.tlsCert = pems.cert;
+
     return new Promise((resolve, reject) => {
       this.server = http.createServer((req, res) => {
-        // Handle regular HTTP requests (unlikely for Anthropic, but handle anyway)
         this.handleHttpRequest(req, res);
       });
 
-      // Handle CONNECT method for HTTPS tunneling
       this.server.on("connect", (req: http.IncomingMessage, clientSocket: net.Socket, head: Buffer) => {
         this.handleConnect(req, clientSocket, head);
       });
@@ -85,12 +104,10 @@ export class AnthropicProxy extends EventEmitter {
     const hostname = url.hostname;
 
     if (!this.isTargetHost(hostname)) {
-      // Pass through non-target traffic
       this.forwardHttp(req, res, url);
       return;
     }
 
-    // For target hosts, forward and capture response headers
     this.forwardAndCapture(req, res, url);
   }
 
@@ -147,17 +164,12 @@ export class AnthropicProxy extends EventEmitter {
   /**
    * Handle CONNECT tunneling for HTTPS.
    *
-   * For non-target hosts we just create a plain TCP tunnel.
-   * For target hosts (api.anthropic.com) we perform a MitM:
-   *  1. Tell the client the tunnel is established (200).
-   *  2. Open our OWN TLS server socket to speak to the client.
-   *  3. Parse the now-decrypted HTTP request coming from the client.
-   *  4. Forward it over a real HTTPS connection to the target.
-   *  5. Capture the response headers, then relay everything back.
+   * For non-target hosts: plain TCP tunnel (passthrough).
+   * For target hosts (api.anthropic.com): TLS MitM to decrypt,
+   * parse HTTP, capture rate-limit headers, and relay responses.
    *
-   * NOTE: Because we terminate TLS ourselves, the client (Claude Code)
-   * must either trust our self-signed CA or have NODE_TLS_REJECT_UNAUTHORIZED=0.
-   * The README explains how to set this up.
+   * The client must have NODE_TLS_REJECT_UNAUTHORIZED=0 set
+   * because we terminate TLS with a self-signed certificate.
    */
   private handleConnect(
     req: http.IncomingMessage,
@@ -180,61 +192,58 @@ export class AnthropicProxy extends EventEmitter {
       return;
     }
 
-    // --- MitM path for target hosts ---
+    // --- TLS MitM for target hosts ---
     clientSocket.write("HTTP/1.1 200 Connection Established\r\n\r\n");
 
-    // We need a self-signed TLS context. Generate one at startup (see
-    // generateSelfSignedCert helper). For simplicity this version uses
-    // a pre-generated keypair shipped with the extension or generated on
-    // first run. The real implementation is in extension.ts which calls
-    // ensureCert().
-
-    // For the initial implementation we use a simpler approach:
-    // We act as an HTTP-level interceptor by reading raw data from the
-    // client socket after the CONNECT handshake, forwarding it as an
-    // HTTPS request, and relaying back.
-    this.interceptTunnel(clientSocket, head, hostname, port);
-  }
-
-  /**
-   * Simplified tunnel interception: read the raw TLS client-hello
-   * from the client, open a real TLS connection to the target, and
-   * splice the two together while sniffing the plaintext on the
-   * server side.
-   *
-   * This approach does NOT require a self-signed CA — instead it
-   * connects to the real server and captures the decrypted data
-   * from the *server* side of the pipe by hooking into Node's
-   * TLS socket events. However, the request/response bytes are
-   * encrypted from the client's perspective so we can only capture
-   * metadata (timing, sizes) unless we MitM.
-   *
-   * For full header capture we need the MitM approach. Here we
-   * fall back to a metadata-only capture and advise the user to
-   * use the HTTP_PROXY / HTTPS_PROXY env-var approach instead,
-   * which avoids CONNECT entirely and gives us plaintext HTTP.
-   */
-  private interceptTunnel(
-    clientSocket: net.Socket,
-    head: Buffer,
-    hostname: string,
-    port: number
-  ) {
-    // For the recommended setup (HTTPS_PROXY=http://127.0.0.1:PORT),
-    // Node's http module sends plain HTTP through the proxy, so the
-    // handleHttpRequest path is used instead of CONNECT.
-    //
-    // If we still get a CONNECT (e.g. from curl or another client),
-    // just tunnel and emit a metadata-only event.
-    const serverSocket = net.connect(port, hostname, () => {
-      serverSocket.write(head);
-      serverSocket.pipe(clientSocket);
-      clientSocket.pipe(serverSocket);
+    const secureContext = tls.createSecureContext({
+      key: this.tlsKey,
+      cert: this.tlsCert,
     });
 
-    this.emit("tunnel", { hostname, port, timestamp: new Date() });
-    serverSocket.on("error", () => clientSocket.end());
-    clientSocket.on("error", () => serverSocket.end());
+    const tlsSocket = new tls.TLSSocket(clientSocket, {
+      isServer: true,
+      secureContext,
+    });
+
+    if (head.length > 0) {
+      tlsSocket.unshift(head);
+    }
+
+    // Create a temporary HTTP server and feed the decrypted TLS
+    // socket into it so Node's HTTP parser handles framing.
+    const interceptServer = http.createServer((req, res) => {
+      const path = req.url || "/";
+      const options: https.RequestOptions = {
+        hostname,
+        port,
+        path,
+        method: req.method,
+        headers: { ...req.headers, host: hostname },
+      };
+
+      const proxyReq = https.request(options, (proxyRes) => {
+        this.captureRateLimits(
+          req.method || "GET",
+          path,
+          proxyRes.statusCode || 0,
+          proxyRes.headers as Record<string, string>
+        );
+        res.writeHead(proxyRes.statusCode || 500, proxyRes.headers);
+        proxyRes.pipe(res);
+      });
+
+      req.pipe(proxyReq);
+      proxyReq.on("error", () => {
+        res.statusCode = 502;
+        res.end("Bad Gateway");
+      });
+    });
+
+    // Emit the TLS socket as a new connection on the HTTP server
+    interceptServer.emit("connection", tlsSocket);
+
+    tlsSocket.on("error", () => clientSocket.destroy());
+    tlsSocket.on("close", () => interceptServer.close());
   }
 
   private captureRateLimits(

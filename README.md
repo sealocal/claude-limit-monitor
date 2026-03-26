@@ -38,13 +38,15 @@ Claude Rate Monitor: Start Proxy
 
 ### 3. Configure Claude Code to use the proxy
 
-Claude Code (and most Node.js tools) respect the `HTTP_PROXY` / `HTTPS_PROXY` environment variables. Before launching Claude Code, set them in your terminal:
+Claude Code (and most Node.js tools) respect the `HTTP_PROXY` / `HTTPS_PROXY` environment variables. When `HTTPS_PROXY` is set, the client sends a `CONNECT` request to establish a tunnel. The proxy terminates TLS using a self-signed certificate, decrypts the traffic, captures rate-limit headers, then forwards requests to the real Anthropic API over HTTPS.
+
+Because the proxy uses a self-signed certificate, you must disable TLS verification on the client side.
 
 **macOS / Linux:**
 ```bash
 export HTTP_PROXY=http://127.0.0.1:8919
 export HTTPS_PROXY=http://127.0.0.1:8919
-export NODE_TLS_REJECT_UNAUTHORIZED=0  # Required for HTTPS interception
+export NODE_TLS_REJECT_UNAUTHORIZED=0  # Required — proxy uses a self-signed cert
 claude  # Start Claude Code as usual
 ```
 
@@ -58,7 +60,7 @@ claude
 
 > **Tip:** The extension copies the env command to your clipboard when you start the proxy — just paste it into your terminal.
 
-> **Note:** `NODE_TLS_REJECT_UNAUTHORIZED=0` disables TLS certificate verification so the proxy can inspect HTTPS traffic. Only use this during local development/monitoring.
+> **Security note:** `NODE_TLS_REJECT_UNAUTHORIZED=0` disables TLS certificate verification for all outbound connections in that shell session. Only use this during local development/monitoring. Non-target hosts are tunneled through without interception.
 
 ### 4. Watch the dashboard
 
@@ -82,18 +84,26 @@ The status bar shows a percentage of remaining requests, turning yellow below 20
 ```
 Claude Code CLI
     │
-    │  HTTP_PROXY=http://127.0.0.1:8919
+    │  HTTPS_PROXY=http://127.0.0.1:8919
+    │  (sends CONNECT api.anthropic.com:443)
     ▼
-┌─────────────────────┐
-│  Local HTTP Proxy    │  ◄── Captures response headers
-│  (127.0.0.1:8919)   │
-└─────────┬───────────┘
-          │
-          ▼
-   api.anthropic.com
+┌──────────────────────────┐
+│  Local HTTP Proxy         │
+│  (127.0.0.1:8919)        │
+│                           │
+│  1. Accepts CONNECT       │
+│  2. Terminates TLS        │  ◄── Self-signed cert
+│     (MitM for target      │
+│      hosts only)          │
+│  3. Parses HTTP request   │
+│  4. Forwards over HTTPS   │──► api.anthropic.com
+│  5. Captures rate-limit   │
+│     response headers      │
+│  6. Relays response back  │
+└──────────────────────────┘
 ```
 
-When `HTTP_PROXY` is set, Node.js sends requests as plain HTTP to the proxy (even for HTTPS URLs). The proxy forwards them to the real Anthropic API over HTTPS, reads the response headers, and relays everything back. This avoids the complexity of TLS MitM certificates.
+When `HTTPS_PROXY` is set, the client sends a `CONNECT` request to tunnel through the proxy. For target hosts (`api.anthropic.com`), the proxy terminates TLS with a self-signed certificate, giving it access to the plaintext HTTP traffic. It forwards each request to the real API over HTTPS, captures the rate-limit response headers, and relays everything back to the client. Non-target hosts are tunneled through without interception.
 
 ## Rate Limit Headers Captured
 
