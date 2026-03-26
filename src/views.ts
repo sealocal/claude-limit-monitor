@@ -16,10 +16,14 @@ export class RateLimitStatusProvider
   readonly onDidChangeTreeData = this._onDidChange.event;
 
   private latest: RateLimitInfo | null = null;
+  private latestWithRateLimits: RateLimitInfo | null = null;
   private proxyRunning = false;
 
   update(info: RateLimitInfo) {
     this.latest = info;
+    if (info.rateLimits.requestsRemaining !== null || info.rateLimits.tokensRemaining !== null) {
+      this.latestWithRateLimits = info;
+    }
     this._onDidChange.fire();
   }
 
@@ -56,7 +60,7 @@ export class RateLimitStatusProvider
       return items;
     }
 
-    const rl = this.latest.rateLimits;
+    const rl = (this.latestWithRateLimits ?? this.latest).rateLimits;
 
     if (rl.requestsRemaining !== null && rl.requestsLimit !== null) {
       const pct =
@@ -78,6 +82,26 @@ export class RateLimitStatusProvider
       });
     }
 
+    if (rl.inputTokensRemaining !== null && rl.inputTokensLimit !== null) {
+      const pct =
+        (parseInt(rl.inputTokensRemaining) / parseInt(rl.inputTokensLimit)) * 100;
+      items.push({
+        label: "Input Tokens",
+        value: `${rl.inputTokensRemaining} / ${rl.inputTokensLimit} (${pct.toFixed(0)}%)`,
+        icon: pct < 20 ? "warning" : pct < 50 ? "info" : "pass",
+      });
+    }
+
+    if (rl.outputTokensRemaining !== null && rl.outputTokensLimit !== null) {
+      const pct =
+        (parseInt(rl.outputTokensRemaining) / parseInt(rl.outputTokensLimit)) * 100;
+      items.push({
+        label: "Output Tokens",
+        value: `${rl.outputTokensRemaining} / ${rl.outputTokensLimit} (${pct.toFixed(0)}%)`,
+        icon: pct < 20 ? "warning" : pct < 50 ? "info" : "pass",
+      });
+    }
+
     if (rl.requestsReset) {
       items.push({
         label: "Requests Reset",
@@ -90,6 +114,22 @@ export class RateLimitStatusProvider
       items.push({
         label: "Tokens Reset",
         value: rl.tokensReset,
+        icon: "history",
+      });
+    }
+
+    if (rl.inputTokensReset) {
+      items.push({
+        label: "Input Tokens Reset",
+        value: rl.inputTokensReset,
+        icon: "history",
+      });
+    }
+
+    if (rl.outputTokensReset) {
+      items.push({
+        label: "Output Tokens Reset",
+        value: rl.outputTokensReset,
         icon: "history",
       });
     }
@@ -174,7 +214,7 @@ export class RequestHistoryProvider
 
     // Show full headers on hover
     const headerLines = Object.entries(info.headers)
-      .filter(([k]) => k.toLowerCase().startsWith("x-ratelimit") || k.toLowerCase() === "retry-after")
+      .filter(([k]) => k.toLowerCase().startsWith("anthropic-ratelimit") || k.toLowerCase() === "retry-after")
       .map(([k, v]) => `${k}: ${v}`)
       .join("\n");
     item.tooltip = new vscode.MarkdownString(

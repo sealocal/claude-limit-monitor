@@ -19,6 +19,12 @@ export interface RateLimitInfo {
     tokensLimit: string | null;
     tokensRemaining: string | null;
     tokensReset: string | null;
+    inputTokensLimit: string | null;
+    inputTokensRemaining: string | null;
+    inputTokensReset: string | null;
+    outputTokensLimit: string | null;
+    outputTokensRemaining: string | null;
+    outputTokensReset: string | null;
     retryAfter: string | null;
   };
 }
@@ -262,12 +268,18 @@ export class AnthropicProxy extends EventEmitter {
       statusCode,
       headers: { ...headers },
       rateLimits: {
-        requestsLimit: h("x-ratelimit-limit-requests"),
-        requestsRemaining: h("x-ratelimit-remaining-requests"),
-        requestsReset: h("x-ratelimit-reset-requests"),
-        tokensLimit: h("x-ratelimit-limit-tokens"),
-        tokensRemaining: h("x-ratelimit-remaining-tokens"),
-        tokensReset: h("x-ratelimit-reset-tokens"),
+        requestsLimit: h("anthropic-ratelimit-requests-limit"),
+        requestsRemaining: h("anthropic-ratelimit-requests-remaining"),
+        requestsReset: h("anthropic-ratelimit-requests-reset"),
+        tokensLimit: h("anthropic-ratelimit-tokens-limit"),
+        tokensRemaining: h("anthropic-ratelimit-tokens-remaining"),
+        tokensReset: h("anthropic-ratelimit-tokens-reset"),
+        inputTokensLimit: h("anthropic-ratelimit-input-tokens-limit"),
+        inputTokensRemaining: h("anthropic-ratelimit-input-tokens-remaining"),
+        inputTokensReset: h("anthropic-ratelimit-input-tokens-reset"),
+        outputTokensLimit: h("anthropic-ratelimit-output-tokens-limit"),
+        outputTokensRemaining: h("anthropic-ratelimit-output-tokens-remaining"),
+        outputTokensReset: h("anthropic-ratelimit-output-tokens-reset"),
         retryAfter: h("retry-after"),
       },
     };
