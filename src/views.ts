@@ -16,13 +16,16 @@ export class RateLimitStatusProvider
   readonly onDidChangeTreeData = this._onDidChange.event;
 
   private latest: RateLimitInfo | null = null;
-  private latestWithRateLimits: RateLimitInfo | null = null;
+  private rlHeaders: Record<string, string> = {};
   private proxyRunning = false;
 
   update(info: RateLimitInfo) {
     this.latest = info;
-    if (info.rateLimits.requestsRemaining !== null || info.rateLimits.tokensRemaining !== null) {
-      this.latestWithRateLimits = info;
+    const incoming = Object.fromEntries(
+      Object.entries(info.headers).filter(([k]) => k.startsWith("anthropic-ratelimit") || k === "retry-after")
+    );
+    if (Object.keys(incoming).length > 0) {
+      this.rlHeaders = { ...this.rlHeaders, ...incoming };
     }
     this._onDidChange.fire();
   }
@@ -60,86 +63,48 @@ export class RateLimitStatusProvider
       return items;
     }
 
-    const rl = (this.latestWithRateLimits ?? this.latest).rateLimits;
+    const h = this.rlHeaders;
+    const fmtReset = (ts: string) => new Date(parseInt(ts) * 1000).toLocaleTimeString();
+    const usageIcon = (pct: number) => pct > 80 ? "warning" : pct > 50 ? "info" : "pass";
 
-    if (rl.requestsRemaining !== null && rl.requestsLimit !== null) {
-      const pct =
-        (parseInt(rl.requestsRemaining) / parseInt(rl.requestsLimit)) * 100;
-      items.push({
-        label: "Requests",
-        value: `${rl.requestsRemaining} / ${rl.requestsLimit} (${pct.toFixed(0)}%)`,
-        icon: pct < 20 ? "warning" : pct < 50 ? "info" : "pass",
-      });
+    // Unified rate limit headers (Claude.ai account-based billing)
+    if (h["anthropic-ratelimit-unified-status"]) {
+      const s = h["anthropic-ratelimit-unified-status"];
+      items.push({ label: "Status", value: s, icon: s === "allowed" ? "pass" : "error" });
     }
 
-    if (rl.tokensRemaining !== null && rl.tokensLimit !== null) {
-      const pct =
-        (parseInt(rl.tokensRemaining) / parseInt(rl.tokensLimit)) * 100;
-      items.push({
-        label: "Tokens",
-        value: `${rl.tokensRemaining} / ${rl.tokensLimit} (${pct.toFixed(0)}%)`,
-        icon: pct < 20 ? "warning" : pct < 50 ? "info" : "pass",
-      });
+    if (h["anthropic-ratelimit-unified-5h-utilization"] !== undefined) {
+      const pct = parseFloat(h["anthropic-ratelimit-unified-5h-utilization"]) * 100;
+      items.push({ label: "5h Usage", value: `${pct.toFixed(0)}%`, icon: usageIcon(pct) });
     }
 
-    if (rl.inputTokensRemaining !== null && rl.inputTokensLimit !== null) {
-      const pct =
-        (parseInt(rl.inputTokensRemaining) / parseInt(rl.inputTokensLimit)) * 100;
-      items.push({
-        label: "Input Tokens",
-        value: `${rl.inputTokensRemaining} / ${rl.inputTokensLimit} (${pct.toFixed(0)}%)`,
-        icon: pct < 20 ? "warning" : pct < 50 ? "info" : "pass",
-      });
+    if (h["anthropic-ratelimit-unified-7d-utilization"] !== undefined) {
+      const pct = parseFloat(h["anthropic-ratelimit-unified-7d-utilization"]) * 100;
+      items.push({ label: "7d Usage", value: `${pct.toFixed(0)}%`, icon: usageIcon(pct) });
     }
 
-    if (rl.outputTokensRemaining !== null && rl.outputTokensLimit !== null) {
-      const pct =
-        (parseInt(rl.outputTokensRemaining) / parseInt(rl.outputTokensLimit)) * 100;
-      items.push({
-        label: "Output Tokens",
-        value: `${rl.outputTokensRemaining} / ${rl.outputTokensLimit} (${pct.toFixed(0)}%)`,
-        icon: pct < 20 ? "warning" : pct < 50 ? "info" : "pass",
-      });
+    if (h["anthropic-ratelimit-unified-5h-reset"]) {
+      items.push({ label: "5h Reset", value: fmtReset(h["anthropic-ratelimit-unified-5h-reset"]), icon: "history" });
     }
 
-    if (rl.requestsReset) {
-      items.push({
-        label: "Requests Reset",
-        value: rl.requestsReset,
-        icon: "history",
-      });
+    if (h["anthropic-ratelimit-unified-7d-reset"]) {
+      items.push({ label: "7d Reset", value: fmtReset(h["anthropic-ratelimit-unified-7d-reset"]), icon: "history" });
     }
 
-    if (rl.tokensReset) {
-      items.push({
-        label: "Tokens Reset",
-        value: rl.tokensReset,
-        icon: "history",
-      });
+    if (h["anthropic-ratelimit-unified-overage-status"]) {
+      items.push({ label: "Overage", value: h["anthropic-ratelimit-unified-overage-status"], icon: "info" });
     }
 
-    if (rl.inputTokensReset) {
-      items.push({
-        label: "Input Tokens Reset",
-        value: rl.inputTokensReset,
-        icon: "history",
-      });
+    // Traditional API key rate limit headers (fallback)
+    if (h["anthropic-ratelimit-requests-remaining"] && h["anthropic-ratelimit-requests-limit"]) {
+      const rem = parseInt(h["anthropic-ratelimit-requests-remaining"]);
+      const lim = parseInt(h["anthropic-ratelimit-requests-limit"]);
+      const pct = (rem / lim) * 100;
+      items.push({ label: "Requests", value: `${rem} / ${lim} (${pct.toFixed(0)}%)`, icon: usageIcon(100 - pct) });
     }
 
-    if (rl.outputTokensReset) {
-      items.push({
-        label: "Output Tokens Reset",
-        value: rl.outputTokensReset,
-        icon: "history",
-      });
-    }
-
-    if (rl.retryAfter) {
-      items.push({
-        label: "Retry After",
-        value: `${rl.retryAfter}s`,
-        icon: "error",
-      });
+    if (h["retry-after"]) {
+      items.push({ label: "Retry After", value: `${h["retry-after"]}s`, icon: "error" });
     }
 
     items.push({
@@ -170,6 +135,9 @@ export class RequestHistoryProvider
   private maxItems = 100;
 
   add(info: RateLimitInfo) {
+    if (info.path.startsWith("/api/event_logging/")) {
+      return;
+    }
     this.history.unshift(info);
     if (this.history.length > this.maxItems) {
       this.history.pop();

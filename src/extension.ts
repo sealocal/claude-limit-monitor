@@ -50,22 +50,21 @@ export function activate(context: vscode.ExtensionContext) {
       proxy = new AnthropicProxy(port, targetHosts);
 
       proxy.on("rateLimit", (info: RateLimitInfo) => {
-        statusProvider.update(info);
-        historyProvider.add(info);
+        if (!info.path.startsWith("/api/event_logging/")) {
+          statusProvider.update(info);
+          historyProvider.add(info);
+        }
         updateStatusBar(info);
 
         // Warn if close to limits
-        const remaining = parseInt(
-          info.rateLimits.requestsRemaining || "999",
-          10
-        );
+        const util5h = parseFloat(info.headers["anthropic-ratelimit-unified-5h-utilization"] || "0");
         if (info.statusCode === 429) {
           vscode.window.showWarningMessage(
-            `Rate limited! Retry after ${info.rateLimits.retryAfter || "?"}s`
+            `Rate limited! Retry after ${info.headers["retry-after"] || "?"}s`
           );
-        } else if (remaining <= 5 && remaining > 0) {
+        } else if (util5h >= 0.9) {
           vscode.window.showWarningMessage(
-            `Only ${remaining} API requests remaining before reset`
+            `5h rate limit at ${Math.round(util5h * 100)}% usage`
           );
         }
       });
@@ -143,21 +142,29 @@ export function activate(context: vscode.ExtensionContext) {
 }
 
 function updateStatusBar(info: RateLimitInfo) {
-  const rl = info.rateLimits;
   if (info.statusCode === 429) {
     statusBar.text = "$(error) Claude RL: 429!";
-    statusBar.backgroundColor = new vscode.ThemeColor(
-      "statusBarItem.errorBackground"
-    );
-  } else if (rl.requestsRemaining !== null) {
-    const rem = parseInt(rl.requestsRemaining, 10);
-    const lim = parseInt(rl.requestsLimit || "1", 10);
-    const pct = Math.round((rem / lim) * 100);
+    statusBar.backgroundColor = new vscode.ThemeColor("statusBarItem.errorBackground");
+    return;
+  }
+  const util5h = info.headers["anthropic-ratelimit-unified-5h-utilization"];
+  if (util5h !== undefined) {
+    const pct = Math.round(parseFloat(util5h) * 100);
+    statusBar.text = `$(pulse) Claude RL: ${pct}% used`;
+    statusBar.backgroundColor = pct >= 80
+      ? new vscode.ThemeColor("statusBarItem.warningBackground")
+      : undefined;
+    return;
+  }
+  // Fallback: traditional requests-based header
+  const rem = info.rateLimits.requestsRemaining;
+  const lim = info.rateLimits.requestsLimit;
+  if (rem !== null && lim !== null) {
+    const pct = Math.round((parseInt(rem) / parseInt(lim)) * 100);
     statusBar.text = `$(pulse) Claude RL: ${pct}%`;
-    statusBar.backgroundColor =
-      pct < 20
-        ? new vscode.ThemeColor("statusBarItem.warningBackground")
-        : undefined;
+    statusBar.backgroundColor = pct < 20
+      ? new vscode.ThemeColor("statusBarItem.warningBackground")
+      : undefined;
   }
 }
 

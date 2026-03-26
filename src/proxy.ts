@@ -261,6 +261,7 @@ export class AnthropicProxy extends EventEmitter {
     const h = (name: string) =>
       headers[name] || headers[name.toLowerCase()] || null;
 
+
     const info: RateLimitInfo = {
       timestamp: new Date(),
       method,
