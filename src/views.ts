@@ -64,7 +64,12 @@ export class RateLimitStatusProvider
     }
 
     const h = this.rlHeaders;
-    const fmtReset = (ts: string) => new Date(parseInt(ts) * 1000).toLocaleTimeString();
+    const fmtReset = (ts: string, includeDate = false) => {
+      const d = new Date(parseInt(ts) * 1000);
+      return includeDate
+        ? d.toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })
+        : d.toLocaleTimeString();
+    };
     const usageIcon = (pct: number) => pct > 80 ? "warning" : pct > 50 ? "info" : "pass";
 
     // Unified rate limit headers (Claude.ai account-based billing)
@@ -88,7 +93,7 @@ export class RateLimitStatusProvider
     }
 
     if (h["anthropic-ratelimit-unified-7d-reset"]) {
-      items.push({ label: "7d Reset", value: fmtReset(h["anthropic-ratelimit-unified-7d-reset"]), icon: "history" });
+      items.push({ label: "7d Reset", value: fmtReset(h["anthropic-ratelimit-unified-7d-reset"], true), icon: "history" });
     }
 
     if (h["anthropic-ratelimit-unified-overage-status"]) {
