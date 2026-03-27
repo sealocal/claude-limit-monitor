@@ -18,11 +18,11 @@ There are no tests or linting configured.
 
 Three source files in `src/`, compiled to `out/` as CommonJS (ES2022 target):
 
-- **extension.ts** — Extension entry point. Registers 4 commands (start/stop proxy, show dashboard, clear history), creates two tree view providers, manages status bar item, and fires warning notifications when rate limits are close to exhaustion.
+- **extension.ts** — Extension entry point. Registers 4 commands (start/stop proxy, show dashboard, clear history), creates two tree view providers, manages status bar item. Uses unified 5h utilization header for status bar display and warnings, with traditional request-count headers as fallback. Filters out `/api/event_logging/` requests from the dashboard.
 
-- **proxy.ts** — `AnthropicProxy` class (extends EventEmitter). Generates self-signed TLS certs via `selfsigned` on startup. Handles both regular HTTP forwarding and HTTPS CONNECT tunneling with MitM for target hosts (plain TCP passthrough for non-targets). Captures 7 rate-limit headers from responses and emits `rateLimit` events.
+- **proxy.ts** — `AnthropicProxy` class (extends EventEmitter). Generates self-signed TLS certs via `selfsigned` on startup. Handles both regular HTTP forwarding and HTTPS CONNECT tunneling with MitM for target hosts (plain TCP passthrough for non-targets). Captures all `anthropic-ratelimit-*` response headers and emits `rateLimit` events.
 
-- **views.ts** — Two VS Code TreeDataProviders: `RateLimitStatusProvider` (current rate limit snapshot with percentages and reset times) and `RequestHistoryProvider` (scrollable log of last 100 requests with color-coded status icons and hover tooltips).
+- **views.ts** — Two VS Code TreeDataProviders: `RateLimitStatusProvider` (current rate limit snapshot with percentages and reset times) and `RequestHistoryProvider` (scrollable log of last 100 requests with color-coded status icons and hover tooltips). The status provider merges rate-limit headers incrementally so values persist across requests that may not include all headers. Supports both unified (account-based) and traditional (API-key-based) rate-limit header formats.
 
 ## Key Technical Details
 
@@ -30,3 +30,7 @@ Three source files in `src/`, compiled to `out/` as CommonJS (ES2022 target):
 - Default proxy port is 8919, configurable via `claudeRateMonitor.proxyPort` setting.
 - Target hosts for interception default to `["api.anthropic.com"]`, configurable via `claudeRateMonitor.targetHosts`.
 - Only production dependency is `selfsigned` (^5.5.0).
+- Two rate-limit header families are supported:
+  - **Unified (account-based):** `anthropic-ratelimit-unified-{status,5h-utilization,7d-utilization,5h-reset,7d-reset,overage-status}`
+  - **Traditional (API-key-based):** `anthropic-ratelimit-{requests,tokens,input-tokens,output-tokens}-{limit,remaining,reset}`
+- The proxy must be running (via VS Code command or `autoStart` setting) before setting `HTTPS_PROXY` on the client.
