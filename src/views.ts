@@ -7,6 +7,7 @@ interface StatusItem {
   label: string;
   value: string;
   icon: string;
+  command?: string;
 }
 
 export class RateLimitStatusProvider
@@ -42,6 +43,9 @@ export class RateLimitStatusProvider
     );
     item.iconPath = new vscode.ThemeIcon(el.icon);
     item.tooltip = `${el.label}: ${el.value}`;
+    if (el.command) {
+      item.command = { command: el.command, title: el.label };
+    }
     return item;
   }
 
@@ -51,15 +55,18 @@ export class RateLimitStatusProvider
     items.push({
       label: "Proxy",
       value: this.proxyRunning ? "Running" : "Stopped",
-      icon: this.proxyRunning ? "debug-start" : "debug-stop",
+      icon: this.proxyRunning ? "debug-stop" : "debug-start",
+      command: this.proxyRunning ? "claudeRateMonitor.stop" : "claudeRateMonitor.start",
     });
 
     if (!this.latest) {
-      items.push({
-        label: "Status",
-        value: "Waiting for requests…",
-        icon: "loading~spin",
-      });
+      if (this.proxyRunning) {
+        items.push({
+          label: "Status",
+          value: "Waiting for requests…",
+          icon: "loading~spin",
+        });
+      }
       return items;
     }
 
