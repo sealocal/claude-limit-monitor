@@ -73,6 +73,11 @@ export function activate(context: vscode.ExtensionContext) {
         vscode.window.showErrorMessage(`Proxy error: ${err.message}`);
       });
 
+      proxy.on("stopped", () => {
+        statusProvider.setProxyStatus(false);
+        statusBar.text = "$(pulse) Claude RL: Off";
+      });
+
       proxy.on("tunnel", (info: { hostname: string }) => {
         // CONNECT-based tunnel (metadata only)
         vscode.window.showInformationMessage(
@@ -107,10 +112,13 @@ export function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(
     vscode.commands.registerCommand("claudeRateMonitor.stop", async () => {
       if (!proxy?.isRunning) {
-        vscode.window.showInformationMessage("Proxy is not running");
+        // Heal any UI desync (e.g. server closed unexpectedly before 'stopped' fired)
+        statusProvider.setProxyStatus(false);
+        statusBar.text = "$(pulse) Claude RL: Off";
         return;
       }
       await proxy.stop();
+      // UI is updated by the 'stopped' event listener, but set here too for safety
       statusProvider.setProxyStatus(false);
       statusBar.text = "$(pulse) Claude RL: Off";
       vscode.window.showInformationMessage("Proxy stopped");

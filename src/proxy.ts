@@ -76,6 +76,11 @@ export class AnthropicProxy extends EventEmitter {
       });
 
       this.server.listen(this.port, "127.0.0.1", () => {
+        // Emit 'stopped' whenever the server closes, regardless of cause
+        this.server!.on("close", () => {
+          this.server = null;
+          this.emit("stopped");
+        });
         this.emit("started", this.port);
         resolve();
       });
@@ -84,15 +89,16 @@ export class AnthropicProxy extends EventEmitter {
 
   stop(): Promise<void> {
     return new Promise((resolve) => {
-      if (this.server) {
-        this.server.close(() => {
-          this.server = null;
-          this.emit("stopped");
-          resolve();
-        });
-      } else {
+      if (!this.server) {
         resolve();
+        return;
       }
+      // Resolve once the 'close' handler (registered in start) has fired
+      this.server.once("close", () => resolve());
+      if (this.server.listening) {
+        this.server.close();
+      }
+      // If not listening but server exists, it's already closing — once("close") will resolve us
     });
   }
 
