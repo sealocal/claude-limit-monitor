@@ -1,6 +1,6 @@
 {
-  "name": "claude-rate-monitor",
-  "displayName": "Claude Rate Limit Monitor",
+  "name": "claude-limit-monitor",
+  "displayName": "Claude Limit Monitor",
   "description": "Monitor Anthropic API rate limit headers from Claude Code CLI traffic",
   "version": "0.1.0",
   "engines": {
@@ -14,38 +14,38 @@
   "contributes": {
     "commands": [
       {
-        "command": "claudeRateMonitor.start",
-        "title": "Claude Rate Monitor: Start Proxy"
+        "command": "claudeLimitMonitor.start",
+        "title": "Claude Limit Monitor: Start Proxy"
       },
       {
-        "command": "claudeRateMonitor.stop",
-        "title": "Claude Rate Monitor: Stop Proxy"
+        "command": "claudeLimitMonitor.stop",
+        "title": "Claude Limit Monitor: Stop Proxy"
       },
       {
-        "command": "claudeRateMonitor.showDashboard",
-        "title": "Claude Rate Monitor: Show Dashboard"
+        "command": "claudeLimitMonitor.showDashboard",
+        "title": "Claude Limit Monitor: Show Dashboard"
       },
       {
-        "command": "claudeRateMonitor.clear",
-        "title": "Claude Rate Monitor: Clear History"
+        "command": "claudeLimitMonitor.clear",
+        "title": "Claude Limit Monitor: Clear History"
       }
     ],
     "configuration": {
-      "title": "Claude Rate Monitor",
+      "title": "Claude Limit Monitor",
       "properties": {
-        "claudeRateMonitor.proxyPort": {
+        "claudeLimitMonitor.proxyPort": {
           "type": "number",
           "default": 8919,
           "description": "Local proxy port for intercepting API traffic"
         },
-        "claudeRateMonitor.targetHosts": {
+        "claudeLimitMonitor.targetHosts": {
           "type": "array",
           "default": [
             "api.anthropic.com"
           ],
           "description": "Hostnames to monitor"
         },
-        "claudeRateMonitor.autoStart": {
+        "claudeLimitMonitor.autoStart": {
           "type": "boolean",
           "default": false,
           "description": "Automatically start the proxy when VS Code opens"
@@ -55,20 +55,20 @@
     "viewsContainers": {
       "activitybar": [
         {
-          "id": "claude-rate-monitor",
-          "title": "Claude Rate Monitor",
+          "id": "claude-limit-monitor",
+          "title": "Claude Limit Monitor",
           "icon": "$(pulse)"
         }
       ]
     },
     "views": {
-      "claude-rate-monitor": [
+      "claude-limit-monitor": [
         {
-          "id": "claudeRateMonitor.statusView",
+          "id": "claudeLimitMonitor.statusView",
           "name": "Rate Limits"
         },
         {
-          "id": "claudeRateMonitor.historyView",
+          "id": "claudeLimitMonitor.historyView",
           "name": "Request History"
         }
       ]

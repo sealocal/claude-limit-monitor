@@ -56,7 +56,7 @@ export class RateLimitStatusProvider
       label: "Proxy",
       value: this.proxyRunning ? "Running" : "Stopped",
       icon: this.proxyRunning ? "debug-stop" : "debug-start",
-      command: this.proxyRunning ? "claudeRateMonitor.stop" : "claudeRateMonitor.start",
+      command: this.proxyRunning ? "claudeLimitMonitor.stop" : "claudeLimitMonitor.start",
     });
 
     if (!this.latest) {

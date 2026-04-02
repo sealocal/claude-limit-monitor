@@ -6,7 +6,7 @@ let proxy: AnthropicProxy | null = null;
 let statusBar: vscode.StatusBarItem;
 
 export function activate(context: vscode.ExtensionContext) {
-  const config = vscode.workspace.getConfiguration("claudeRateMonitor");
+  const config = vscode.workspace.getConfiguration("claudeLimitMonitor");
   const port = config.get<number>("proxyPort", 8919);
   const targetHosts = config.get<string[]>("targetHosts", [
     "api.anthropic.com",
@@ -17,11 +17,11 @@ export function activate(context: vscode.ExtensionContext) {
   const historyProvider = new RequestHistoryProvider();
 
   vscode.window.registerTreeDataProvider(
-    "claudeRateMonitor.statusView",
+    "claudeLimitMonitor.statusView",
     statusProvider
   );
   vscode.window.registerTreeDataProvider(
-    "claudeRateMonitor.historyView",
+    "claudeLimitMonitor.historyView",
     historyProvider
   );
 
@@ -30,16 +30,16 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.StatusBarAlignment.Right,
     100
   );
-  statusBar.command = "claudeRateMonitor.showDashboard";
-  statusBar.text = "$(pulse) Claude RL: Off";
-  statusBar.tooltip = "Claude Rate Limit Monitor — click to toggle";
+  statusBar.command = "claudeLimitMonitor.showDashboard";
+  statusBar.text = "$(pulse) Claude Limit: Off";
+  statusBar.tooltip = "Claude Limit Monitor — click to toggle";
   statusBar.show();
   context.subscriptions.push(statusBar);
 
   // ── Commands ──
 
   context.subscriptions.push(
-    vscode.commands.registerCommand("claudeRateMonitor.start", async () => {
+    vscode.commands.registerCommand("claudeLimitMonitor.start", async () => {
       if (proxy?.isRunning) {
         vscode.window.showInformationMessage(
           `Proxy already running on port ${port}`
@@ -75,7 +75,7 @@ export function activate(context: vscode.ExtensionContext) {
 
       proxy.on("stopped", () => {
         statusProvider.setProxyStatus(false);
-        statusBar.text = "$(pulse) Claude RL: Off";
+        statusBar.text = "$(pulse) Claude Limit: Off";
       });
 
       proxy.on("tunnel", (info: { hostname: string }) => {
@@ -88,7 +88,7 @@ export function activate(context: vscode.ExtensionContext) {
       try {
         await proxy.start();
         statusProvider.setProxyStatus(true);
-        statusBar.text = "$(pulse) Claude RL: On";
+        statusBar.text = "$(pulse) Claude Limit: On";
         statusBar.backgroundColor = undefined;
 
         const msg = await vscode.window.showInformationMessage(
@@ -110,34 +110,34 @@ export function activate(context: vscode.ExtensionContext) {
   );
 
   context.subscriptions.push(
-    vscode.commands.registerCommand("claudeRateMonitor.stop", async () => {
+    vscode.commands.registerCommand("claudeLimitMonitor.stop", async () => {
       if (!proxy?.isRunning) {
         // Heal any UI desync (e.g. server closed unexpectedly before 'stopped' fired)
         statusProvider.setProxyStatus(false);
-        statusBar.text = "$(pulse) Claude RL: Off";
+        statusBar.text = "$(pulse) Claude Limit: Off";
         return;
       }
       await proxy.stop();
       // UI is updated by the 'stopped' event listener, but set here too for safety
       statusProvider.setProxyStatus(false);
-      statusBar.text = "$(pulse) Claude RL: Off";
+      statusBar.text = "$(pulse) Claude Limit: Off";
       vscode.window.showInformationMessage("Proxy stopped");
     })
   );
 
   context.subscriptions.push(
-    vscode.commands.registerCommand("claudeRateMonitor.showDashboard", () => {
+    vscode.commands.registerCommand("claudeLimitMonitor.showDashboard", () => {
       // Toggle proxy on/off from status bar
       if (proxy?.isRunning) {
-        vscode.commands.executeCommand("claudeRateMonitor.stop");
+        vscode.commands.executeCommand("claudeLimitMonitor.stop");
       } else {
-        vscode.commands.executeCommand("claudeRateMonitor.start");
+        vscode.commands.executeCommand("claudeLimitMonitor.start");
       }
     })
   );
 
   context.subscriptions.push(
-    vscode.commands.registerCommand("claudeRateMonitor.clear", () => {
+    vscode.commands.registerCommand("claudeLimitMonitor.clear", () => {
       historyProvider.clear();
       vscode.window.showInformationMessage("Request history cleared");
     })
@@ -145,20 +145,20 @@ export function activate(context: vscode.ExtensionContext) {
 
   // Auto-start if configured
   if (config.get<boolean>("autoStart", false)) {
-    vscode.commands.executeCommand("claudeRateMonitor.start");
+    vscode.commands.executeCommand("claudeLimitMonitor.start");
   }
 }
 
 function updateStatusBar(info: RateLimitInfo) {
   if (info.statusCode === 429) {
-    statusBar.text = "$(error) Claude RL: 429!";
+    statusBar.text = "$(error) Claude Limit: 429!";
     statusBar.backgroundColor = new vscode.ThemeColor("statusBarItem.errorBackground");
     return;
   }
   const util5h = info.headers["anthropic-ratelimit-unified-5h-utilization"];
   if (util5h !== undefined) {
     const pct = Math.round(parseFloat(util5h) * 100);
-    statusBar.text = `$(pulse) Claude RL: ${pct}% used`;
+    statusBar.text = `$(pulse) Claude Limit: ${pct}% used`;
     statusBar.backgroundColor = pct >= 80
       ? new vscode.ThemeColor("statusBarItem.warningBackground")
       : undefined;
@@ -169,7 +169,7 @@ function updateStatusBar(info: RateLimitInfo) {
   const lim = info.rateLimits.requestsLimit;
   if (rem !== null && lim !== null) {
     const pct = Math.round((parseInt(rem) / parseInt(lim)) * 100);
-    statusBar.text = `$(pulse) Claude RL: ${pct}%`;
+    statusBar.text = `$(pulse) Claude Limit: ${pct}%`;
     statusBar.backgroundColor = pct < 20
       ? new vscode.ThemeColor("statusBarItem.warningBackground")
       : undefined;

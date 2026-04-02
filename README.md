@@ -1,4 +1,4 @@
-# Claude Rate Limit Monitor
+# Claude Limit Monitor
 
 A VS Code extension that monitors Anthropic API rate limit headers from Claude Code CLI traffic in real time.
 
@@ -16,7 +16,7 @@ A VS Code extension that monitors Anthropic API rate limit headers from Claude C
 ### 1. Install the extension
 
 ```bash
-cd claude-rate-monitor
+cd claude-limit-monitor
 npm install
 npm run compile
 ```
@@ -25,7 +25,7 @@ Then press **F5** in VS Code to launch the Extension Development Host, or packag
 
 ```bash
 npx @vscode/vsce package
-code --install-extension claude-rate-monitor-0.1.0.vsix
+code --install-extension claude-limit-monitor-0.1.0.vsix
 ```
 
 ### 2. Start the proxy
@@ -33,7 +33,7 @@ code --install-extension claude-rate-monitor-0.1.0.vsix
 Open the Command Palette (`Cmd+Shift+P` / `Ctrl+Shift+P`) and run:
 
 ```
-Claude Rate Monitor: Start Proxy
+Claude Limit Monitor: Start Proxy
 ```
 
 ### 3. Configure Claude Code to use the proxy
@@ -64,7 +64,7 @@ claude
 
 ### 4. Watch the dashboard
 
-Open the **Claude Rate Monitor** panel in the Activity Bar (the pulse icon). You'll see:
+Open the **Claude Limit Monitor** panel in the Activity Bar (the pulse icon). You'll see:
 
 - **Rate Limits** — live snapshot of remaining requests/tokens and reset times
 - **Request History** — scrollable log of every intercepted API call
@@ -75,9 +75,9 @@ The status bar shows a percentage of remaining requests, turning yellow below 20
 
 | Setting | Default | Description |
 |---------|---------|-------------|
-| `claudeRateMonitor.proxyPort` | `8919` | Local proxy port |
-| `claudeRateMonitor.targetHosts` | `["api.anthropic.com"]` | Hostnames to intercept |
-| `claudeRateMonitor.autoStart` | `false` | Start proxy when VS Code opens |
+| `claudeLimitMonitor.proxyPort` | `8919` | Local proxy port |
+| `claudeLimitMonitor.targetHosts` | `["api.anthropic.com"]` | Hostnames to intercept |
+| `claudeLimitMonitor.autoStart` | `false` | Start proxy when VS Code opens |
 
 ## How it works
 
@@ -119,7 +119,7 @@ When `HTTPS_PROXY` is set, the client sends a `CONNECT` request to tunnel throug
 
 ## Commands
 
-- **Claude Rate Monitor: Start Proxy** — start the interception proxy
-- **Claude Rate Monitor: Stop Proxy** — stop the proxy
-- **Claude Rate Monitor: Show Dashboard** — toggle proxy from status bar
-- **Claude Rate Monitor: Clear History** — clear the request log
+- **Claude Limit Monitor: Start Proxy** — start the interception proxy
+- **Claude Limit Monitor: Stop Proxy** — stop the proxy
+- **Claude Limit Monitor: Show Dashboard** — toggle proxy from status bar
+- **Claude Limit Monitor: Clear History** — clear the request log

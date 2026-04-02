@@ -27,8 +27,8 @@ Three source files in `src/`, compiled to `out/` as CommonJS (ES2022 target):
 ## Key Technical Details
 
 - The proxy requires `NODE_TLS_REJECT_UNAUTHORIZED=0` on the client side due to self-signed certificates.
-- Default proxy port is 8919, configurable via `claudeRateMonitor.proxyPort` setting.
-- Target hosts for interception default to `["api.anthropic.com"]`, configurable via `claudeRateMonitor.targetHosts`.
+- Default proxy port is 8919, configurable via `claudeLimitMonitor.proxyPort` setting.
+- Target hosts for interception default to `["api.anthropic.com"]`, configurable via `claudeLimitMonitor.targetHosts`.
 - Only production dependency is `selfsigned` (^5.5.0).
 - Two rate-limit header families are supported:
   - **Unified (account-based):** `anthropic-ratelimit-unified-{status,5h-utilization,7d-utilization,5h-reset,7d-reset,overage-status}`
