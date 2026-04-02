@@ -229,6 +229,8 @@ export class AnthropicProxy extends EventEmitter {
 
     // Create a temporary HTTP server and feed the decrypted TLS
     // socket into it so Node's HTTP parser handles framing.
+    const activeSockets = new Set<net.Socket>();
+
     const interceptServer = http.createServer((req, res) => {
       const path = req.url || "/";
       const options: https.RequestOptions = {
@@ -258,11 +260,23 @@ export class AnthropicProxy extends EventEmitter {
       });
     });
 
+    // Track sockets so we can destroy them when the client disconnects.
+    interceptServer.on("connection", (socket: net.Socket) => {
+      activeSockets.add(socket);
+      socket.once("close", () => activeSockets.delete(socket));
+    });
+
     // Emit the TLS socket as a new connection on the HTTP server
     interceptServer.emit("connection", tlsSocket);
 
     tlsSocket.on("error", () => clientSocket.destroy());
-    tlsSocket.on("close", () => interceptServer.close());
+    tlsSocket.on("close", () => {
+      for (const socket of activeSockets) {
+        socket.destroy();
+      }
+      activeSockets.clear();
+      interceptServer.close();
+    });
   }
 
   private captureRateLimits(
