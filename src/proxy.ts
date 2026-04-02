@@ -6,6 +6,11 @@ import { EventEmitter } from "events";
 import { URL } from "url";
 import * as selfsigned from "selfsigned";
 
+// Direct agent that ignores HTTP_PROXY/HTTPS_PROXY env vars.
+// Without this, the proxy's own outbound requests would loop back
+// through itself when those env vars point at port 8919.
+const directAgent = new https.Agent({ rejectUnauthorized: false });
+
 export interface RateLimitInfo {
   timestamp: Date;
   method: string;
@@ -156,6 +161,7 @@ export class AnthropicProxy extends EventEmitter {
       path: url.pathname + url.search,
       method: req.method,
       headers: { ...req.headers, host: url.hostname },
+      agent: directAgent,
     };
 
     const proxyReq = https.request(options, (proxyRes) => {
@@ -231,6 +237,7 @@ export class AnthropicProxy extends EventEmitter {
         path,
         method: req.method,
         headers: { ...req.headers, host: hostname },
+        agent: directAgent,
       };
 
       const proxyReq = https.request(options, (proxyRes) => {
