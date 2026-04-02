@@ -9,7 +9,7 @@ import * as selfsigned from "selfsigned";
 // Direct agent that ignores HTTP_PROXY/HTTPS_PROXY env vars.
 // Without this, the proxy's own outbound requests would loop back
 // through itself when those env vars point at port 8919.
-const directAgent = new https.Agent({ rejectUnauthorized: false });
+const directAgent = new https.Agent({ keepAlive: true });
 
 export interface RateLimitInfo {
   timestamp: Date;
