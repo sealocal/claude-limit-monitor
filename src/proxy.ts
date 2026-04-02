@@ -40,6 +40,7 @@ export class AnthropicProxy extends EventEmitter {
   private targetHosts: string[];
   private tlsKey: string = "";
   private tlsCert: string = "";
+  private activeSockets = new Set<net.Socket>();
 
   constructor(port: number, targetHosts: string[] = ["api.anthropic.com"]) {
     super();
@@ -75,6 +76,11 @@ export class AnthropicProxy extends EventEmitter {
         this.handleConnect(req, clientSocket, head);
       });
 
+      this.server.on("connection", (socket: net.Socket) => {
+        this.activeSockets.add(socket);
+        socket.once("close", () => this.activeSockets.delete(socket));
+      });
+
       this.server.on("error", (err) => {
         this.emit("error", err);
         reject(err);
@@ -83,6 +89,7 @@ export class AnthropicProxy extends EventEmitter {
       this.server.listen(this.port, "127.0.0.1", () => {
         // Emit 'stopped' whenever the server closes, regardless of cause
         this.server!.on("close", () => {
+          this.activeSockets.clear();
           this.server = null;
           this.emit("stopped");
         });
@@ -102,6 +109,9 @@ export class AnthropicProxy extends EventEmitter {
       this.server.once("close", () => resolve());
       if (this.server.listening) {
         this.server.close();
+      }
+      for (const socket of this.activeSockets) {
+        socket.destroy();
       }
       // If not listening but server exists, it's already closing — once("close") will resolve us
     });
